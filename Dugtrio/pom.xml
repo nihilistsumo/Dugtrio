@@ -1,5 +1,14 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
+
+  <groupId>Dugtrio</groupId>
+  <artifactId>Dugtrio</artifactId>
+  <version>0.0.1</version>
+  <packaging>jar</packaging>
+
+  <name>dugtrio</name>
+  <url>http://maven.apache.org</url>
   
   <repositories>
       <repository>
@@ -7,12 +16,13 @@
           <url>https://jitpack.io</url>
       </repository>
   </repositories>
-  
-  <groupId>Dugtrio</groupId>
-  <artifactId>Dugtrio</artifactId>
-  <version>0.0.1</version>
-  <name>dugtrio</name>
-  
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>junit</groupId>
@@ -71,7 +81,10 @@
     	<version>1.1.1</version>
 	</dependency>
 
+	
+
   </dependencies>
+  
   
   <build>
     <plugins>
@@ -98,7 +111,7 @@
       <archive>
         <manifest>
           <addClasspath>true</addClasspath>
-          <mainClass>main.OddOneOut</mainClass>
+          <mainClass>com.main.OddOneOut</mainClass>
         </manifest>
       </archive>
       <descriptorRefs>
@@ -109,4 +122,5 @@
   
     </plugins>
   </build>
+  
 </project>
