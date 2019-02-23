@@ -97,7 +97,10 @@ public class OddOneOut {
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		OddOneOut oddOne = new OddOneOut();
-		oddOne.runTriples(args[0], args[1], args[2]);
+		if(args.length!=3)
+			System.out.println("Usage: java -jar [target/jar-with-dependencies] triples-file index-dir method");
+		else
+			oddOne.runTriples(args[0], args[1], args[2]);
 
 	}
 
