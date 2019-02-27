@@ -3,6 +3,7 @@ package com;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -59,13 +60,17 @@ public class AspectVecGeneratorOfTriples {
 			}
 			br.close();
 			HashMap<String, SparseAspectVector> paraAspVecMap = new HashMap<String, SparseAspectVector>();
+			System.out.println("Calculating aspect vectors");
 			StreamSupport.stream(paras.spliterator(), false).forEach(paraID -> {
 				try {
 					QueryParser qpID = new QueryParser("Id", new StandardAnalyzer());
 					String paraText = is.doc(is.search(qpID.parse(paraID), 1).scoreDocs[0].doc).get("Text");
 					SparseAspectVector aspVec = this.getAspectVec(paraText, isAsp, analyzer, vecLen);
 					paraAspVecMap.put(paraID, aspVec);
-					System.out.print(".");
+					if(paraAspVecMap.size()%100 == 0)
+						System.out.print(".");
+					if(paraAspVecMap.size()%1000 == 0)
+						System.out.println("+");
 				} catch (IOException | ParseException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -79,6 +84,11 @@ public class AspectVecGeneratorOfTriples {
 					vec.put("asp:"+aspVec.getAspDocID(i), aspVec.get(i));
 				paraVecMap.put(paraID, vec);
 			}
+			FileWriter fw = new FileWriter(outDir+"/"+tripleFilePath.split("/")[tripleFilePath.split("/").length-1]);
+			fw.write(paraVecMap.toJSONString());
+			fw.flush();
+			fw.close();
+			br.close();
 			
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
