@@ -8,6 +8,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.stream.StreamSupport;
 
 import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -17,8 +19,12 @@ import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.store.FSDirectory;
+import org.json.simple.JSONObject;
+
 
 public class OddOneOut {
 	
@@ -64,62 +70,67 @@ public class OddOneOut {
 		return odd;
 	}
 	
-	public void runTriples(String tripleFilePath, String indexDirPath, String method, String analyzer, String outDir) {
+	public void runTriplesLucene(String tripleFilePath, String indexDirPath, String method, String analyzer, String outDir) {
 		try {
 			IndexSearcher is = new IndexSearcher(DirectoryReader.open(FSDirectory.open((new File(indexDirPath).toPath()))));
 			if(method.equalsIgnoreCase("bm25"))
 				is.setSimilarity(new BM25Similarity());
 			else
 				method = "default";
-			QueryParser qpID = new QueryParser("Id", new StandardAnalyzer());
+			
 			BufferedReader br = new BufferedReader(new FileReader(new File(tripleFilePath)));
+			ArrayList<String> correctLines = new ArrayList<String>();
 			BufferedWriter bwCorrect = new BufferedWriter(new FileWriter(new File(outDir+"/correct-"+method+"-"+analyzer)));
+			ArrayList<String> incorrectLines = new ArrayList<String>();
 			BufferedWriter bwIncorrect = new BufferedWriter(new FileWriter(new File(outDir+"/incorrect-"+method+"-"+analyzer)));
-			int countDot = 0;
-			int hit = 0;
-			int count = 0;
+			
 			ArrayList<String> lines = new ArrayList<String>();
 			String l = br.readLine();
 			while(l != null) {
 				lines.add(l);
 				l = br.readLine();
 			}
-			for(String line:lines) {
-				String[] elems = line.split(" ");
-				String[] paraIDs = new String[3];
-				String[] paraTexts = new String[3];
-				int[] docIDs = new int[3];
-				paraIDs[0] = elems[1];
-				paraIDs[1] = elems[2];
-				paraIDs[2] = elems[3];
-				for(int i=0; i<3; i++) {
-					docIDs[i] = is.search(qpID.parse(paraIDs[i]), 1).scoreDocs[0].doc;
-					paraTexts[i] = is.doc(docIDs[i]).get("Text");
-				}
-				String correctOdd = paraIDs[2];
-				String retrievedOdd = this.findOddOne(paraIDs, paraTexts, docIDs, is, analyzer);
-				if(correctOdd.equals(retrievedOdd)) {
-					hit++;
-					bwCorrect.write(line+"\n");
-				}
-				else
-					bwIncorrect.write(line+" "+retrievedOdd+"\n");
-				count++;
-				if(count%500==0) {
-					System.out.print(".");
-					countDot++;
-					if(countDot%50==0)
+			StreamSupport.stream(lines.spliterator(), true).forEach(line -> {
+				try {
+					QueryParser qpID = new QueryParser("Id", new StandardAnalyzer());
+					String[] elems = line.split(" ");
+					String[] paraIDs = new String[3];
+					String[] paraTexts = new String[3];
+					int[] docIDs = new int[3];
+					paraIDs[0] = elems[1];
+					paraIDs[1] = elems[2];
+					paraIDs[2] = elems[3];
+					for(int i=0; i<3; i++) {
+						docIDs[i] = is.search(qpID.parse(paraIDs[i]), 1).scoreDocs[0].doc;
+						paraTexts[i] = is.doc(docIDs[i]).get("Text");
+					}
+					String correctOdd = paraIDs[2];
+					String retrievedOdd = this.findOddOne(paraIDs, paraTexts, docIDs, is, analyzer);
+					if(correctOdd.equals(retrievedOdd))
+						correctLines.add(line);
+					else
+						incorrectLines.add(line+" "+retrievedOdd);
+					if((correctLines.size()+incorrectLines.size())%500==0)
+						System.out.print(".");
+					if((correctLines.size()+incorrectLines.size())%25000==0)
 						System.out.println("+");
+				} catch (IOException | ParseException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
-			}
+			});
+			for(String c:correctLines)
+				bwCorrect.write(c+"\n");
+			for(String ic:incorrectLines)
+				bwIncorrect.write(ic+"\n");
 			br.close();
 			bwCorrect.close();
 			bwIncorrect.close();
-			System.out.println("\nCorrect: "+hit);
-			System.out.println("Incorrect: "+(count-hit));
-			System.out.println("Total: "+count);
-			System.out.println("Accuracy of "+method+": "+(100.0*(double)hit/count)+"%");
-		} catch (IOException | ParseException e) {
+			System.out.println("\nCorrect: "+correctLines.size());
+			System.out.println("Incorrect: "+incorrectLines.size());
+			System.out.println("Total: "+(correctLines.size()+incorrectLines.size()));
+			System.out.println("Accuracy of "+method+": "+(100.0*(double)correctLines.size()/(correctLines.size()+incorrectLines.size()))+"%");
+		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
@@ -128,10 +139,21 @@ public class OddOneOut {
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		OddOneOut oddOne = new OddOneOut();
-		if(args.length!=5)
-			System.out.println("Usage: java -jar [target/jar-with-dependencies] triples-file index-dir method analyzer output-dir");
-		else
-			oddOne.runTriples(args[0], args[1], args[2], args[3], args[4]);
+		if(args[0].equalsIgnoreCase("run")) {
+			if(args.length!=6)
+				System.out.println("Usage: java -jar [target/jar-with-dependencies] run triples-file index-dir method analyzer output-dir");
+			else
+				oddOne.runTriplesLucene(args[1], args[2], args[3], args[4], args[5]);
+		}
+		else if(args[0].equalsIgnoreCase("vec")) {
+			if(args.length!=7) {
+				System.out.println("Usage: java -jar [target/jar-with-dependencies] vec triples-file index-dir asp-index-dir analyzer vector-length output-dir");
+			}
+			else {
+				AspectVecGeneratorOfTriples asp = new AspectVecGeneratorOfTriples();
+				asp.getAspvecOfParasFromTriples(args[1], args[2], args[3], args[4], args[5], args[6]);
+			}
+		}
 
 	}
 
