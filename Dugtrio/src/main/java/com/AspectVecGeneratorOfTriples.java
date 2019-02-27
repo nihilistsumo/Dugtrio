@@ -84,7 +84,7 @@ public class AspectVecGeneratorOfTriples {
 					vec.put("asp:"+aspVec.getAspDocID(i), aspVec.get(i));
 				paraVecMap.put(paraID, vec);
 			}
-			FileWriter fw = new FileWriter(outDir+"/"+tripleFilePath.split("/")[tripleFilePath.split("/").length-1]);
+			FileWriter fw = new FileWriter(outDir+"/"+tripleFilePath.split("/")[tripleFilePath.split("/").length-1]+"-"+analyzer+"-"+vectorLen+".vec");
 			fw.write(paraVecMap.toJSONString());
 			fw.flush();
 			fw.close();
