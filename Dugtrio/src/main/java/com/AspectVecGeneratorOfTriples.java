@@ -76,6 +76,7 @@ public class AspectVecGeneratorOfTriples {
 					e.printStackTrace();
 				}
 			});
+			System.out.println("\nDone");
 			JSONObject paraVecMap = new JSONObject();
 			for(String paraID:paraAspVecMap.keySet()) {
 				SparseAspectVector aspVec = paraAspVecMap.get(paraID);
