@@ -2,9 +2,11 @@ package com;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.StringReader;
 import java.util.ArrayList;
@@ -80,6 +82,38 @@ public class DatasetExplorer {
 		return pageTopSections;
 	}
 	
+	public HashMap<String, HashMap<String, Integer>> getPageParaTopsecLabelMap(HashMap<String, ArrayList<String>> pageParas, HashMap<String, ArrayList<String>> pageTops, String topQrelsFile) {
+		HashMap<String, HashMap<String, Integer>> pageParaLabels = new HashMap<String, HashMap<String, Integer>>();
+		try {
+			BufferedReader br = new BufferedReader(new FileReader(new File(topQrelsFile)));
+			String line = br.readLine();
+			while(line != null) {
+				String page = line.split(" ")[0].split("/")[0];
+				String para = line.split(" ")[2];
+				String top = line.split(" ")[0].contains("/") ? line.split(" ")[0].split("/")[1] : "";
+				int label = 0;
+				if(top.length() == 0)
+					label = -1;
+				else
+					label = pageTops.get(page).indexOf(top);
+				if(!pageParaLabels.keySet().contains(page)) {
+					HashMap<String, Integer> paraLables = new HashMap<String, Integer>();
+					paraLables.put(para, label);
+					pageParaLabels.put(page, paraLables);
+				}
+				else {
+					pageParaLabels.get(page).put(para, label);
+				}
+				line = br.readLine();
+			}
+			br.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return pageParaLabels;
+	}
+	
 	public ArrayList<String> getTokensFromTextUsingLucene(String input, Analyzer analyzer) throws IOException{
 	    ArrayList<String> tokens = new ArrayList<String>();
 	    TokenStream tokenStream = analyzer.tokenStream("text", input);
@@ -152,17 +186,19 @@ public class DatasetExplorer {
 		return paraReps;
 	}
 
-	public static void main(String[] args) {
+	/*public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		try {
 			DatasetExplorer exp = new DatasetExplorer();
 			String artQrels = "/home/sumanta/Documents/trec_dataset/benchmarkY1/benchmarkY1-train-nodup/train.pages.cbor-article.qrels";
+			String topQrels = "/home/sumanta/Documents/trec_dataset/benchmarkY1/benchmarkY1-train-nodup/train.pages.cbor-toplevel.qrels";
 			String topicsFile = "/home/sumanta/Documents/trec_dataset/benchmarkY1/benchmarkY1-train-nodup/topics";
 			String indexDirPath = "/media/sumanta/Seagate Backup Plus Drive/indexes/paragraph-corpus-paragraph-index/paragraph.lucene";
 			String outputDirPath = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData";
 			IndexSearcher is = new IndexSearcher(DirectoryReader.open(FSDirectory.open((new File(indexDirPath).toPath()))));
 			HashMap<String, ArrayList<String>> pageParas = exp.getPageParas(artQrels);
 			HashMap<String, ArrayList<String>> pageTops = exp.getPageTopSections(topicsFile);
+			HashMap<String, HashMap<String, Integer>> pageParaLabels = exp.getPageParaTopsecLabelMap(pageParas, pageTops, topQrels);
 			
 			HashMap<String, ArrayList<ArrayList<String>>> pageParaReps = new HashMap<String, ArrayList<ArrayList<String>>>();
 			for(String page:pageParas.keySet()) {
@@ -198,6 +234,12 @@ public class DatasetExplorer {
 			oos3.close();
 			fos3.close();
 			
+			FileOutputStream fos4 = new FileOutputStream(new File(outputDirPath+"/pageParaLabelData"));
+			ObjectOutputStream oos4 = new ObjectOutputStream(fos4);
+			oos4.writeObject(pageParaLabels);
+			oos4.close();
+			fos4.close();
+			
 //			String page = "enwiki:Photosynthesis";
 //			ArrayList<ArrayList<String>> paraReps = exp.getParaRepresentations(pageParas.get(page), pageTops.get(page), is, new StandardAnalyzer());
 //			String a = "International%20protection%20and%20promotion";
@@ -208,6 +250,21 @@ public class DatasetExplorer {
 //			System.out.println(exp.getTokensFromTextUsingLucene(b.replaceAll("%20", " "), new StandardAnalyzer()));
 			System.out.println("Done");
 		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}*/
+	
+	public static void main(String[] args) {
+		String filePath = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/pageParaLabelData";
+		try {
+			FileInputStream fis = new FileInputStream(filePath);
+			ObjectInputStream ois = new ObjectInputStream(fis);
+			HashMap<String, HashMap<String, Integer>> labels = (HashMap<String, HashMap<String, Integer>>) ois.readObject();
+			ois.close();
+			fis.close();
+			System.out.println("Done");
+		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
