@@ -65,7 +65,50 @@ public class SimilaritySuite {
 		return odd;
 	}*/
 	
-	public void calcParaPairSimScore(String pageParaFile, String indexDirPath, String method, String outputFile) {
+	public void calcAttentionBasedParaPairSimScore(String pageParaFile, String indexDirPath, String outputFile) {
+		
+	}
+	
+	public void sumWindowedAndNormalBM25Score(String paraPairBM25File, String paraPairWindowedBM25File, String outputFile) {
+		try {
+			FileInputStream fis = new FileInputStream(paraPairBM25File);
+			ObjectInputStream ois = new ObjectInputStream(fis);
+			HashMap<String, HashMap<String, Double>> bm25Scores = (HashMap<String, HashMap<String, Double>>) ois.readObject();
+			ois.close();
+			fis.close();
+			
+			FileInputStream fis2 = new FileInputStream(paraPairWindowedBM25File);
+			ObjectInputStream ois2 = new ObjectInputStream(fis2);
+			HashMap<String, HashMap<String, Double>> windowedbm25Scores = (HashMap<String, HashMap<String, Double>>) ois2.readObject();
+			ois2.close();
+			fis2.close();
+			
+			HashMap<String, HashMap<String, Double>> sumScores = new HashMap<String, HashMap<String, Double>>();
+			for(String page:bm25Scores.keySet()) {
+				for(String paraPair:bm25Scores.get(page).keySet()) {
+					if(!sumScores.keySet().contains(page)) {
+						HashMap<String, Double> paraPairScores = new HashMap<String, Double>();
+						paraPairScores.put(paraPair, bm25Scores.get(page).get(paraPair)+windowedbm25Scores.get(page).get(paraPair));
+						sumScores.put(page, paraPairScores);
+					}
+					else
+						sumScores.get(page).put(paraPair, bm25Scores.get(page).get(paraPair)+windowedbm25Scores.get(page).get(paraPair));
+				}
+			}
+			
+			FileOutputStream fos = new FileOutputStream(new File(outputFile));
+			ObjectOutputStream oos = new ObjectOutputStream(fos);
+			oos.writeObject(sumScores);
+			oos.close();
+			fos.close();
+			
+		} catch (ClassNotFoundException | IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+	public void calcBM25baselineParaPairSimScore(String pageParaFile, String indexDirPath, String outputFile) {
 		try {
 			FileInputStream fis2 = new FileInputStream(pageParaFile);
 			ObjectInputStream ois2 = new ObjectInputStream(fis2);
@@ -75,40 +118,47 @@ public class SimilaritySuite {
 			
 			HashMap<String, HashMap<String, Double>> pageParaPairScores = new HashMap<String, HashMap<String, Double>>();
 			IndexSearcher is = new IndexSearcher(DirectoryReader.open(FSDirectory.open((new File(indexDirPath).toPath()))));
-			
-			if(method.equalsIgnoreCase("bm25")) {
-				is.setSimilarity(new BM25Similarity());
-				
-				StreamSupport.stream(pageParas.keySet().spliterator(), true).forEach(page -> {
-					try {
-						System.out.println("PAGE: "+page+" started, "+pageParas.get(page).size()+" paras");
-						BooleanQuery.setMaxClauseCount(65536);
-						QueryParser qpID = new QueryParser("Id", new StandardAnalyzer());
-						QueryParser qp = new QueryParser("Text", new StandardAnalyzer());
-						ArrayList<String> paras = pageParas.get(page);
-						for(int i=0; i<paras.size()-1; i++) {
-							for(int j=i+1; j<paras.size(); j++) {
-								double score = 
+
+
+			is.setSimilarity(new BM25Similarity());
+
+			StreamSupport.stream(pageParas.keySet().spliterator(), false).forEach(page -> {
+				try {
+					System.out.println("PAGE: "+page+" started, "+pageParas.get(page).size()+" paras");
+					BooleanQuery.setMaxClauseCount(65536);
+					
+					ArrayList<String> paras = pageParas.get(page);
+					for(int i=0; i<paras.size()-1; i++) {
+						for(int j=i+1; j<paras.size(); j++) {
+							QueryParser qpID = new QueryParser("Id", new StandardAnalyzer());
+							QueryParser qp = new QueryParser("Text", new StandardAnalyzer());
+							String piText = is.doc(is.search(qpID.parse(pageParas.get(page).get(i)), 1).scoreDocs[0].doc).get("Text");
+							String pjText = is.doc(is.search(qpID.parse(pageParas.get(page).get(j)), 1).scoreDocs[0].doc).get("Text");
+							double score = 0;
+							if(piText.length()>0 && pjText.length()>0) {
+								Query qi = qp.parse(QueryParser.escape(piText));
+								Query qj = qp.parse(QueryParser.escape(pjText));
+								score = 
 										Double.max(
-												is.explain(qp.parse(QueryParser.escape(is.doc(is.search(qpID.parse(pageParas.get(page).get(i)), 1).scoreDocs[0].doc).get("Text"))), is.search(qpID.parse(pageParas.get(page).get(j)), 1).scoreDocs[0].doc).getValue(), 
-												is.explain(qp.parse(QueryParser.escape(is.doc(is.search(qpID.parse(pageParas.get(page).get(j)), 1).scoreDocs[0].doc).get("Text"))), is.search(qpID.parse(pageParas.get(page).get(i)), 1).scoreDocs[0].doc).getValue());
-								if(pageParaPairScores.keySet().contains(page))
-									pageParaPairScores.get(page).put(i+" "+j, score);
-								else {
-									HashMap<String, Double> paraPairScores = new HashMap<String, Double>();
-									paraPairScores.put(i+" "+j, score);
-									pageParaPairScores.put(page, paraPairScores);
-								}
+												is.explain(qi, is.search(qpID.parse(pageParas.get(page).get(j)), 1).scoreDocs[0].doc).getValue(), 
+												is.explain(qj, is.search(qpID.parse(pageParas.get(page).get(i)), 1).scoreDocs[0].doc).getValue());
+							}
+							if(pageParaPairScores.keySet().contains(page))
+								pageParaPairScores.get(page).put(i+" "+j, score);
+							else {
+								HashMap<String, Double> paraPairScores = new HashMap<String, Double>();
+								paraPairScores.put(i+" "+j, score);
+								pageParaPairScores.put(page, paraPairScores);
 							}
 						}
-						System.out.println("PAGE: "+page+" done");
-					} catch (IOException | ParseException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
 					}
-				});
-			}
-			
+					System.out.println("PAGE: "+page+" done");
+				} catch (IOException | ParseException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			});
+
 			FileOutputStream fos = new FileOutputStream(new File(outputFile));
 			ObjectOutputStream oos = new ObjectOutputStream(fos);
 			oos.writeObject(pageParaPairScores);
@@ -123,11 +173,19 @@ public class SimilaritySuite {
 	
 	public static void main(String[] args) {
 		SimilaritySuite s = new SimilaritySuite();
+		/*
 		String pageParaFile = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/pageParasData";
-		String indexDirPath = "/media/sumanta/Seagate Backup Plus Drive/indexes/paragraph-corpus-paragraph-index-with-aspvec/paragraph.lucene";
+//		String indexDirPath = "/media/sumanta/Seagate Backup Plus Drive/indexes/paragraph-corpus-paragraph-index-with-aspvec/paragraph.lucene";
+		String indexDirPath = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/by1-train-nodup-window-paraRep.index";
 		String method = "bm25";
-		String outputFile = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/bm25.parapair.train";
-		s.calcParaPairSimScore(pageParaFile, indexDirPath, method, outputFile);
+		String outputFile = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/bm25-windowed.parapair.train";
+		s.calcBM25baselineParaPairSimScore(pageParaFile, indexDirPath, outputFile);*/
+		
+		String bm25ScoresFile = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/bm25.parapair.train";
+		String windowedbm25ScoresFile = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/bm25-windowed.parapair.train";
+		String outputFile = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/comb-bm25-windowed.parapair.train";
+		s.sumWindowedAndNormalBM25Score(bm25ScoresFile, windowedbm25ScoresFile, outputFile);
+		
 	}
 	
 //	public String findOddAsptext(String[] tripleID, String[] tripleText, int[] triplesDocIDs, IndexSearcher is, String analyzer) {

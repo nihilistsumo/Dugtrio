@@ -13,15 +13,23 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.Constants;
 
@@ -125,59 +133,62 @@ public class DatasetExplorer {
 	    return tokens;
 	}
 	
-	public ArrayList<ArrayList<String>> getParaRepresentations(ArrayList<String> paras, ArrayList<String> secLabels, int windowArmSize, IndexSearcher is, Analyzer analyzer) {
-		ArrayList<ArrayList<String>> paraReps = new ArrayList<ArrayList<String>>();
-		// paras < sec-labels < window tokens > > 
+	public ArrayList<Integer> mergeWindows(ArrayList<Integer> start, ArrayList<Integer> end) {
+		Collections.sort(start);
+		Collections.sort(end);
+		
+		ArrayList<Integer> result = new ArrayList<Integer>();
+		int i = 0;
+		int j = 1;
+		while(j-1 < start.size()) {
+			while(j < start.size() && start.get(j) <= end.get(j-1))
+				j++;
+			result.add(start.get(i));
+			result.add(end.get(j-1));
+			i = j;
+			j++;
+		}
+		return result;
+	}
+	
+	// Try to get one string representations for each paragraph.
+	// Use each top section heading to open up windows into the
+	// para text. Get overlapping windows to merge to a single window.
+	
+	public ArrayList<String> getParaRepresentations(ArrayList<String> paras, ArrayList<String> secLabels, int windowArmSize, IndexSearcher is, Analyzer analyzer) {
+		ArrayList<String> paraReps = new ArrayList<String>();
 		try {
 			QueryParser qpID = new QueryParser("Id", new StandardAnalyzer());
 			int c = 1;
 			for(String para:paras) {
 //				System.out.println("PARA: "+para);
 				ArrayList<String> paraTextTokens = new ArrayList<String>(Arrays.asList(is.doc(is.search(qpID.parse(para), 1).scoreDocs[0].doc).get("Text").split(" ")));
-				ArrayList<String> paraRep = new ArrayList<String>();
+				String paraRep = "";
+				ArrayList<Integer> windowStartIndices = new ArrayList<Integer>();
+				ArrayList<Integer> windowEndIndices = new ArrayList<Integer>();
 				for(String sec:secLabels) {
 //					System.out.println("SEC: "+sec);
 					String paraRepForSec = "";
 					ArrayList<String> secLabelTokens = this.getTokensFromTextUsingLucene(sec.replaceAll("%20", " "), analyzer);
-					ArrayList<Integer> windowStartIndices = new ArrayList<Integer>();
-					ArrayList<Integer> windowEndIndices = new ArrayList<Integer>();
-//					if(c == 155)
-//						System.out.println("cultivate");
+					
 					for(String secToken:secLabelTokens) {
 						String paraToken = "";
 						for(int i=0; i<paraTextTokens.size(); i++) {
 							paraToken = paraTextTokens.get(i);
 							if(secToken.equalsIgnoreCase(paraToken)) {
-//								if(windowIndices.size() > 0 && windowIndices.get(windowIndices.size()-1) > (i-3))
-//									windowIndices.remove(windowIndices.size()-1);
-//								else
-//									windowIndices.add(Math.max(0, i-3));
-//								windowIndices.add(Math.min(paraTextTokens.size()-1, i+3));
 								windowStartIndices.add(Math.max(0, i-windowArmSize));
 								windowEndIndices.add(Math.min(paraTextTokens.size()-1, i+windowArmSize));
 							}
 						}
 					}
-					//System.out.println(c+" "+windowIndices.toString());
 					c++;
-					if(windowStartIndices.size()>0) {
-						Collections.sort(windowStartIndices);
-						Collections.sort(windowEndIndices);
-//						System.out.println("Window starts: "+windowStartIndices.toString());
-//						System.out.println("Window ends:   "+windowEndIndices.toString());
-						for(int i=0; i<windowStartIndices.size(); ) {
-							int start = windowStartIndices.get(i);
-							while(i+1 < windowStartIndices.size() && windowEndIndices.get(i) >= windowStartIndices.get(i+1))
-								i++;
-							int end = windowEndIndices.get(i);
-							for(String windowTok:paraTextTokens.subList(windowStartIndices.get(i), windowEndIndices.get(i) + 1))
-								paraRepForSec += windowTok+" ";
-							i++;
-						}
-					}
-					paraRep.add(paraRepForSec.trim());
 				}
-				paraReps.add(paraRep);
+				ArrayList<Integer> windows = this.mergeWindows(windowStartIndices, windowEndIndices);
+				for(int w=0; w<windows.size()/2; w++) {
+					for(String windowToken:paraTextTokens.subList(windows.get(2*w), windows.get(2*w+1)+1))
+						paraRep += windowToken.toLowerCase()+" ";
+				}
+				paraReps.add(paraRep.trim());
 			}
 		} catch (IOException | ParseException e) {
 			// TODO Auto-generated catch block
@@ -190,22 +201,36 @@ public class DatasetExplorer {
 		// TODO Auto-generated method stub
 		try {
 			DatasetExplorer exp = new DatasetExplorer();
+			
 			String artQrels = "/home/sumanta/Documents/trec_dataset/benchmarkY1/benchmarkY1-train-nodup/train.pages.cbor-article.qrels";
 			String topQrels = "/home/sumanta/Documents/trec_dataset/benchmarkY1/benchmarkY1-train-nodup/train.pages.cbor-toplevel.qrels";
 			String topicsFile = "/home/sumanta/Documents/trec_dataset/benchmarkY1/benchmarkY1-train-nodup/topics";
 			String indexDirPath = "/media/sumanta/Seagate Backup Plus Drive/indexes/paragraph-corpus-paragraph-index/paragraph.lucene";
 			String outputDirPath = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData";
+			String paraRepIndexDirPath = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/by1-train-nodup-window-paraRep.index";
+			
 			IndexSearcher is = new IndexSearcher(DirectoryReader.open(FSDirectory.open((new File(indexDirPath).toPath()))));
 			HashMap<String, ArrayList<String>> pageParas = exp.getPageParas(artQrels);
 			HashMap<String, ArrayList<String>> pageTops = exp.getPageTopSections(topicsFile);
 			HashMap<String, HashMap<String, Integer>> pageParaLabels = exp.getPageParaTopsecLabelMap(pageParas, pageTops, topQrels);
 			
-			HashMap<String, ArrayList<ArrayList<String>>> pageParaReps = new HashMap<String, ArrayList<ArrayList<String>>>();
+			Directory indexdir = FSDirectory.open((new File(paraRepIndexDirPath)).toPath());
+			IndexWriterConfig conf = new IndexWriterConfig(new StandardAnalyzer());
+			conf.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
+			IndexWriter iw = new IndexWriter(indexdir, conf);
+			
+			HashMap<String, ArrayList<String>> pageParaReps = new HashMap<String, ArrayList<String>>();
 			for(String page:pageParas.keySet()) {
 				System.out.println("PAGE: "+page);
 				ArrayList<String> parasInPage = pageParas.get(page);
-				ArrayList<ArrayList<String>> paraRepInPage = exp.getParaRepresentations(parasInPage, pageTops.get(page), 3, is, new StandardAnalyzer());
+				ArrayList<String> paraRepInPage = exp.getParaRepresentations(parasInPage, pageTops.get(page), 3, is, new StandardAnalyzer());
 				pageParaReps.put(page, paraRepInPage);
+				for(int p=0; p<parasInPage.size(); p++) {
+					Document paraDoc = new Document();
+					paraDoc.add(new StringField("Id", parasInPage.get(p), Field.Store.YES));
+					paraDoc.add(new TextField("Text", paraRepInPage.get(p), Field.Store.YES));
+					iw.addDocument(paraDoc);
+				}
 //				for(int i=0; i<parasInPage.size(); i++) {
 //					System.out.println(parasInPage.get(i));
 //					for(int j=0; j<paraRepInPage.get(i).size(); j++)
@@ -216,6 +241,7 @@ public class DatasetExplorer {
 //					System.out.println();
 //				}
 			}
+			iw.commit();
 			FileOutputStream fos = new FileOutputStream(new File(outputDirPath+"/pageParaRepsData"));
 			ObjectOutputStream oos = new ObjectOutputStream(fos);
 			oos.writeObject(pageParaReps);
@@ -241,14 +267,9 @@ public class DatasetExplorer {
 			fos4.close();
 			
 //			String page = "enwiki:Photosynthesis";
-//			ArrayList<ArrayList<String>> paraReps = exp.getParaRepresentations(pageParas.get(page), pageTops.get(page), is, new StandardAnalyzer());
-//			String a = "International%20protection%20and%20promotion";
-//			String b = "Light-dependent%20reactions";
-//			System.out.println(a);
-//			System.out.println(exp.getTokensFromTextUsingLucene(a.replaceAll("%20", " "), new StandardAnalyzer()));
-//			System.out.println(b);
-//			System.out.println(exp.getTokensFromTextUsingLucene(b.replaceAll("%20", " "), new StandardAnalyzer()));
-			System.out.println("Done");
+//			ArrayList<String> paraReps = exp.getParaRepresentations(pageParas.get(page), pageTops.get(page), 3, is, new StandardAnalyzer());
+//			for(String paraRep:paraReps)
+//				System.out.println(paraRep+"\n");
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -256,15 +277,23 @@ public class DatasetExplorer {
 	}*/
 	
 	public static void main(String[] args) {
-		String filePath = "/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/pageParaLabelData";
 		try {
-			FileInputStream fis = new FileInputStream(filePath);
-			ObjectInputStream ois = new ObjectInputStream(fis);
-			HashMap<String, HashMap<String, Integer>> labels = (HashMap<String, HashMap<String, Integer>>) ois.readObject();
-			ois.close();
-			fis.close();
-			System.out.println("Done");
-		} catch (Exception e) {
+			FileInputStream fis2 = new FileInputStream("/home/sumanta/Documents/Dugtrio-data/AttnetionWindowData/pageParaRepsData");
+			ObjectInputStream ois2 = new ObjectInputStream(fis2);
+			HashMap<String, ArrayList<String>> pageParaReps = (HashMap<String, ArrayList<String>>) ois2.readObject();
+			ois2.close();
+			fis2.close();
+			int total = 0;
+			int blank = 0;
+			for(String page:pageParaReps.keySet()) {
+				for(String para:pageParaReps.get(page)) {
+					if(para.length()<1)
+						blank++;
+					total++;
+				}
+			}
+			System.out.println("Out of "+total+" paras in by1train, "+blank+" are blank");
+		} catch (ClassNotFoundException | IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
